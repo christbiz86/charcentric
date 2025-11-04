@@ -44,7 +44,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: python -m charcentric.orchestrator
+    command: python -m charcentric.consumer_entrypoint
     environment:
       - DATABASE_URL=sqlite:///./charcentric.db
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -91,12 +91,12 @@ services:
 
   ui:
     build:
-      context: ./ui
+      context: ./frontend
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - VITE_API_URL=http://localhost:8000
     depends_on:
       - api
 

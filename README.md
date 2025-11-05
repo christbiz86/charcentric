@@ -148,6 +148,7 @@ The system consists of:
 - `KAFKA_BOOTSTRAP_SERVERS`: Kafka broker address (default: `kafka:9092`)
 - `GEMINI_API_KEY`: Gemini API key for LLM operations
 - `WORKER_ID`: Unique worker identifier (default: `worker`)
+- `LOG_FILE_PATH`: File path to write structured JSON logs (e.g., `/app/logs/worker.log`)
 
 #### UI Service
 - `VITE_API_URL`: API backend URL (default: `http://localhost:8000`)

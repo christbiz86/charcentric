@@ -116,3 +116,18 @@ class Orchestrator:
         }
         self.producer.produce('block-tasks', key=str(run_id), value=json.dumps(payload))
         self.producer.poll(0)
+        log = {
+            "id": str(run_id),
+            "pipeline_run_id": str(run_id),
+            "level": "INFO",
+            "message": "Enqueued block",
+            "metadata": {
+                "block_id": str(block_id),
+                "event": "enqueue_block",
+            }
+        }
+        try:
+            self.producer.produce('pipeline-logs', key=str(run_id), value=json.dumps(log))
+            self.producer.poll(0)
+        except Exception:
+            pass

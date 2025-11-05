@@ -2,15 +2,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install Poetry
-RUN pip install poetry
+# System deps for confluent-kafka
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    librdkafka-dev \
+ && rm -rf /var/lib/apt/lists/*
 
-# Copy poetry files
-COPY pyproject.toml poetry.lock* ./
-
-# Install dependencies
-RUN poetry config virtualenvs.create false && \
-    poetry install --no-dev --no-interaction --no-ansi
+# Install Python deps
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY src/ ./src/
@@ -18,8 +18,8 @@ COPY src/ ./src/
 # Ensure package path
 ENV PYTHONPATH=/app/src
 
-# Create data directory
-RUN mkdir -p /data
+# Create data and logs directories
+RUN mkdir -p /data /app/logs
 
 # Expose port
 EXPOSE 8000

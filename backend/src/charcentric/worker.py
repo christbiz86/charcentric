@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from typing import List
 from uuid import UUID
 
@@ -57,39 +58,58 @@ class Worker:
         block_run = self.repo.get_block_run_by_block(run_id, block_id)
         if not block_run:
             return
-        self.repo.update_block_run_status(block_run.id, BlockRunStatus.RUNNING)
-        self._emit_log(run_id, block_run.id, f"Starting block {block['name']} ({block['type']})", level="INFO")
-        # gather input artifacts from predecessors
-        preds = [UUID(e['source_block_id']) for e in edges if UUID(e['target_block_id']) == block_id]
-        input_artifacts: List[Artifact] = []
-        for pred_id in preds:
-            pred_run = self.repo.get_block_run_by_block(run_id, pred_id)
-            # In a simple MVP, skip loading artifacts content; flow would normally query artifacts table
-            # This can be extended as needed
-        # execute according to type
-        try:
-            btype = block['type']
-            artifacts: List[Artifact] = []
-            if btype == BlockType.CSV_READER.value:
-                artifacts = self.executor.execute_csv_reader(block_run, block.get('config', {}))
-            elif btype == BlockType.LLM_SENTIMENT.value:
-                artifacts = self.executor.execute_llm_sentiment(block_run, input_artifacts)
-            elif btype == BlockType.LLM_TOXICITY.value:
-                artifacts = self.executor.execute_llm_toxicity(block_run, input_artifacts)
-            elif btype == BlockType.FILE_WRITER.value:
-                artifacts = self.executor.execute_file_writer(block_run, input_artifacts, block.get('config', {}))
-            else:
-                raise ValueError(f"Unknown block type {btype}")
-            self.repo.save_artifacts(artifacts)
-            self.repo.update_block_run_status(block_run.id, BlockRunStatus.COMPLETED)
-            self._emit_log(run_id, block_run.id, f"Completed block {block['name']}", level="INFO")
-            # notify orchestrator of completion
-            event = {"pipeline_run_id": str(run_id), "block_id": str(block_id), "event": "block_completed", "pipeline": pipeline}
-            self.producer.produce('orchestrator-events', key=str(run_id), value=json.dumps(event))
-            self.producer.poll(0)
-        except Exception as e:  # noqa: BLE001
-            self.repo.update_block_run_status(block_run.id, BlockRunStatus.FAILED, error_message=str(e))
-            self._emit_log(run_id, block_run.id, f"Block failed: {e}", level="ERROR")
+        
+        max_retries = 3
+        retry_delay = 1.0
+        last_error = None
+        
+        for attempt in range(max_retries):
+            if attempt > 0:
+                self._emit_log(run_id, block_run.id, f"Retrying block {block['name']} (attempt {attempt + 1}/{max_retries})", level="WARN")
+                time.sleep(retry_delay * (2 ** (attempt - 1)))  # exponential backoff
+            
+            self.repo.update_block_run_status(block_run.id, BlockRunStatus.RUNNING)
+            if attempt == 0:
+                self._emit_log(run_id, block_run.id, f"Starting block {block['name']} ({block['type']})", level="INFO")
+            
+            preds = [UUID(e['source_block_id']) for e in edges if UUID(e['target_block_id']) == block_id]
+            input_artifacts: List[Artifact] = []
+            for pred_id in preds:
+                pred_run = self.repo.get_block_run_by_block(run_id, pred_id)
+
+            try:
+                btype = block['type']
+                artifacts: List[Artifact] = []
+                if btype == BlockType.CSV_READER.value:
+                    artifacts = self.executor.execute_csv_reader(block_run, block.get('config', {}))
+                elif btype == BlockType.LLM_SENTIMENT.value:
+                    artifacts = self.executor.execute_llm_sentiment(block_run, input_artifacts)
+                elif btype == BlockType.LLM_TOXICITY.value:
+                    artifacts = self.executor.execute_llm_toxicity(block_run, input_artifacts)
+                elif btype == BlockType.FILE_WRITER.value:
+                    artifacts = self.executor.execute_file_writer(block_run, input_artifacts, block.get('config', {}))
+                else:
+                    raise ValueError(f"Unknown block type {btype}")
+                
+                self.repo.save_artifacts(artifacts)
+                self.repo.update_block_run_status(block_run.id, BlockRunStatus.COMPLETED)
+                self._emit_log(run_id, block_run.id, f"Completed block {block['name']}", level="INFO")
+                event = {"pipeline_run_id": str(run_id), "block_id": str(block_id), "event": "block_completed", "pipeline": pipeline}
+                self.producer.produce('orchestrator-events', key=str(run_id), value=json.dumps(event))
+                self.producer.poll(0)
+                return 
+                
+            except Exception as e:
+                last_error = e
+                self._emit_log(run_id, block_run.id, f"Block attempt {attempt + 1} failed: {e}", level="ERROR")
+                if attempt < max_retries - 1:
+                    continue 
+        
+        self.repo.update_block_run_status(block_run.id, BlockRunStatus.FAILED, error_message=str(last_error))
+        self._emit_log(run_id, block_run.id, f"Block {block['name']} failed after {max_retries} attempts: {last_error}", level="ERROR")
+        event = {"pipeline_run_id": str(run_id), "block_id": str(block_id), "event": "block_failed", "pipeline": pipeline, "error": str(last_error)}
+        self.producer.produce('orchestrator-events', key=str(run_id), value=json.dumps(event))
+        self.producer.poll(0)
 
     def _emit_log(self, run_id: UUID, block_run_id: UUID, message: str, level: str = "INFO"):
         log = LogEntry(pipeline_run_id=run_id, block_run_id=block_run_id, level=level, message=message)

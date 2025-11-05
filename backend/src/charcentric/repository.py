@@ -198,6 +198,23 @@ class SQLiteRepository:
             input_artifacts=[UUID(a) for a in json.loads(row[8])], output_artifacts=[UUID(a) for a in json.loads(row[9])]
         )
 
+    def get_all_block_runs_for_run(self, run_id: UUID) -> List[BlockRun]:
+        """Get all block runs for a pipeline run"""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, pipeline_run_id, block_id, status, created_at, started_at, completed_at, error_message, input_artifacts_json, output_artifacts_json FROM block_runs WHERE pipeline_run_id = ?",
+                (str(run_id),),
+            ).fetchall()
+        block_runs: List[BlockRun] = []
+        for row in rows:
+            block_runs.append(BlockRun(
+                id=UUID(row[0]), pipeline_run_id=UUID(row[1]), block_id=UUID(row[2]), status=BlockRunStatus(row[3]),
+                created_at=datetime.fromisoformat(row[4]), started_at=datetime.fromisoformat(row[5]) if row[5] else None,
+                completed_at=datetime.fromisoformat(row[6]) if row[6] else None, error_message=row[7] or None,
+                input_artifacts=[UUID(a) for a in json.loads(row[8])], output_artifacts=[UUID(a) for a in json.loads(row[9])]
+            ))
+        return block_runs
+
     # Artifacts
     def save_artifacts(self, artifacts: List[Artifact]):
         with self._conn() as conn:
@@ -206,5 +223,3 @@ class SQLiteRepository:
                     "INSERT OR REPLACE INTO artifacts (id, block_run_id, name, type, data_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                     (str(art.id), str(art.block_run_id), art.name, art.type, json.dumps(art.data), art.created_at.isoformat()),
                 )
-
-

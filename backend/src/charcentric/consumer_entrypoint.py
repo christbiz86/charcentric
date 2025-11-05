@@ -27,10 +27,17 @@ def main():
                 continue
             event = json.loads(msg.value())
             if event.get('event') == 'block_completed':
-                run_id = event['pipeline_run_id']
-                block_id = event['block_id']
-                pipeline = event['pipeline']
-                orchestrator.on_block_completed(run_id, pipeline, block_id)  # types: ignore[arg-type]
+                run_id = UUID(event['pipeline_run_id'])
+                block_id = UUID(event['block_id'])
+                from .models import Pipeline
+                pipeline = Pipeline(**event['pipeline'])
+                orchestrator.on_block_completed(run_id, pipeline, block_id)
+            elif event.get('event') == 'block_failed':
+                run_id = UUID(event['pipeline_run_id'])
+                block_id = UUID(event['block_id'])
+                from .models import Pipeline
+                pipeline = Pipeline(**event['pipeline'])
+                orchestrator.on_block_failed(run_id, pipeline, block_id)
     finally:
         consumer.close()
 

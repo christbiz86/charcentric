@@ -14,8 +14,9 @@ class StepExecutor:
 
     def execute_csv_reader(self, block_run: BlockRun, config: Dict[str, Any]) -> List[Artifact]:
         file_path = config.get("file_path", "/data/sample.csv")
+        delimiter = config.get("delimiter", ";")  # Default to semicolon for sample.csv
         with open(file_path, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
+            reader = csv.DictReader(f, delimiter=delimiter)
             rows = list(reader)
         artifact = Artifact(
             block_run_id=block_run.id,

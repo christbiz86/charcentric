@@ -284,11 +284,29 @@ This system includes LLM-powered features for sentiment analysis and toxicity de
 
 ### Automated Testing
 
-1. **Unit Tests** (if available):
+1. **Unit Tests**:
    ```bash
    cd backend
+   # Install test dependencies
+   pip install -r requirements-test.txt
+   # Or if using poetry:
    poetry install
-   poetry run pytest
+   
+   # Run all tests
+   pytest tests/
+   
+   # Run specific test file
+   pytest tests/test_dag.py
+   pytest tests/test_steps.py
+   pytest tests/test_repository.py
+   pytest tests/test_llm.py
+   
+   # Run end-to-end test
+   pytest tests/test_e2e.py -v
+   
+   # Run with coverage
+   pip install pytest-cov
+   pytest tests/ --cov=charcentric --cov-report=html
    ```
 
 2. **Integration Tests**:
